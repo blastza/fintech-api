@@ -1,6 +1,7 @@
 package com.platform_domain.fintech_api.service;
 
 import com.platform_domain.fintech_api.entity.User;
+import com.platform_domain.fintech_api.exception.ResourceNotFoundException;
 import com.platform_domain.fintech_api.repository.UserRepository;
 import com.platform_domain.fintech_api.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +33,7 @@ public class AuthService {
 
     public Map<String, String> login(String email, String password) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new IllegalArgumentException("Invalid credentials");

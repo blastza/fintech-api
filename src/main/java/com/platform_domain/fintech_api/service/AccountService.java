@@ -3,6 +3,8 @@ package com.platform_domain.fintech_api.service;
 import com.platform_domain.fintech_api.entity.Account;
 import com.platform_domain.fintech_api.entity.Transaction;
 import com.platform_domain.fintech_api.entity.User;
+import com.platform_domain.fintech_api.exception.InsufficientFundsException;
+import com.platform_domain.fintech_api.exception.ResourceNotFoundException;
 import com.platform_domain.fintech_api.repository.AccountRepository;
 import com.platform_domain.fintech_api.repository.TransactionRepository;
 import jakarta.transaction.Transactional;
@@ -35,7 +37,7 @@ public class AccountService {
 
     public Account getAccountById(Long id) {
         return accountRepository.findById(id)
-                .orElseThrow(() -> new IllegalStateException("Account not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + id));
     }
 
     @Transactional
@@ -58,7 +60,7 @@ public class AccountService {
         Account account = getAccountById(accountId);
 
         if (account.getBalance().compareTo(amount) < 0)
-            throw new IllegalArgumentException("Insufficient funds. Balance: " + account.getBalance());
+            throw new InsufficientFundsException("Insufficient funds. Balance: " + account.getBalance());
 
         account.setBalance(account.getBalance().subtract(amount));
         accountRepository.save(account);
@@ -75,7 +77,7 @@ public class AccountService {
         Account to = getAccountById(toId);
 
         if (from.getBalance().compareTo(amount) < 0)
-            throw new IllegalArgumentException("Insufficient funds for transfer");
+            throw new InsufficientFundsException("Insufficient funds for transfer");
 
         from.setBalance(from.getBalance().subtract(amount));
         to.setBalance(to.getBalance().add(amount));
