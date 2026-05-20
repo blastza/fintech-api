@@ -3,8 +3,10 @@ package com.platform_domain.fintech_api.service;
 import com.platform_domain.fintech_api.entity.Account;
 import com.platform_domain.fintech_api.entity.Transaction;
 import com.platform_domain.fintech_api.entity.User;
+import com.platform_domain.fintech_api.event.TransactionEvent;
 import com.platform_domain.fintech_api.exception.InsufficientFundsException;
 import com.platform_domain.fintech_api.exception.ResourceNotFoundException;
+import com.platform_domain.fintech_api.kafka.TransactionEventProducer;
 import com.platform_domain.fintech_api.repository.AccountRepository;
 import com.platform_domain.fintech_api.repository.TransactionRepository;
 import jakarta.transaction.Transactional;
@@ -21,6 +23,7 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
+    private final TransactionEventProducer eventProducer;
 
     public Account createAccount(User user, Account.AccountType type) {
         Account account = new Account();
@@ -49,7 +52,7 @@ public class AccountService {
         account.setBalance(account.getBalance().add(amount));
         accountRepository.save(account);
 
-        return savaTransaction(account, null, amount, Transaction.TransactionType.DEPOSIT, description);
+        return saveTransaction(account, null, amount, Transaction.TransactionType.DEPOSIT, description);
     }
 
     @Transactional
@@ -65,11 +68,11 @@ public class AccountService {
         account.setBalance(account.getBalance().subtract(amount));
         accountRepository.save(account);
 
-        return savaTransaction(account, null, amount, Transaction.TransactionType.WITHDRAWAL, description);
+        return saveTransaction(account, null, amount, Transaction.TransactionType.WITHDRAWAL, description);
     }
 
     @Transactional
-    public void transfer(Long fromId, Long toId, BigDecimal amount,String description) {
+    public List<Transaction> transfer(Long fromId, Long toId, BigDecimal amount,String description) {
         if (fromId.equals(toId))
             throw new IllegalArgumentException("Cannot transfer to the same account");
 
@@ -84,11 +87,13 @@ public class AccountService {
         accountRepository.save(from);
         accountRepository.save(to);
 
-        savaTransaction(from, to, amount, Transaction.TransactionType.TRANSFER_OUT, description);
-        savaTransaction(to, from, amount, Transaction.TransactionType.TRANSFER_IN, description);
+        Transaction outTx = saveTransaction(from, to, amount, Transaction.TransactionType.TRANSFER_OUT, description);
+        Transaction inTx = saveTransaction(to, from, amount, Transaction.TransactionType.TRANSFER_IN, description);
+
+        return List.of(outTx, inTx);
     }
 
-    private Transaction savaTransaction(Account account, Account counterpart,
+    private Transaction saveTransaction(Account account, Account counterpart,
                                         BigDecimal amount, Transaction.TransactionType type,
                                         String description) {
         Transaction tx = new Transaction();
@@ -97,6 +102,22 @@ public class AccountService {
         tx.setAmount(amount);
         tx.setType(type);
         tx.setDescription(description);
-        return transactionRepository.save(tx);
+        Transaction saved = transactionRepository.save(tx);
+        publishEvent(saved, account.getUser().getEmail());
+        return saved;
+    }
+
+    private void publishEvent(Transaction tx, String userEmail) {
+        TransactionEvent event = new TransactionEvent(
+                tx.getId(),
+                tx.getAccount().getId(),
+                tx.getCounterpartAccount() != null ? tx.getCounterpartAccount().getId() : null,
+                tx.getType().name(),
+                tx.getAmount(),
+                tx.getDescription(),
+                userEmail,
+                tx.getCreatedAt()
+        );
+        eventProducer.publishTransactionEvent(event);
     }
 }
