@@ -36,7 +36,7 @@ public class AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new IllegalArgumentException("Invalid credentials");
+            throw new ResourceNotFoundException("Invalid credentials");
         }
 
         String token = jwtUtil.generateToken(email);
